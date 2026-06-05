@@ -1,0 +1,22 @@
+<microtsm-layout style="display: flex; flex-direction: row; height: 100vh; width: 100vw;">
+  <nav style="flex-shrink: 0;">
+    <microtsm-application name="@microtsm/navbar"></microtsm-application>
+  </nav>
+  
+  <main style="flex: 1; overflow: auto; background-color: #f8f9fa;">
+    <microtsm-application
+      default
+      name="@microtsm/default-page"
+    ></microtsm-application>
+
+    <microtsm-application
+      route="vue"
+      name="@microtsm/vue-mfe-app"
+    ></microtsm-application>
+    
+    <microtsm-application
+      route="another-path"
+      name="@microtsm/settings-mfe-app"
+    ></microtsm-application>
+  </main>
+</microtsm-layout>

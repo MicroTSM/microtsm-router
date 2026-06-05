@@ -1,0 +1,12 @@
+{
+    "imports": {
+        "vue": "https://cdn.jsdelivr.net/npm/vue@3.5.16/dist/vue.runtime.esm-browser.prod.js",
+        "axios": "https://cdn.jsdelivr.net/npm/axios@1.8.4/dist/esm/axios.min.js",
+        "@microtsm/router": "http://localhost:8080/microtsm-router.es.js",
+        "@microtsm/vue": "https://cdn.jsdelivr.net/npm/@microtsm/vue@0.0.16/dist/microtsm-vue.prod.js",
+        "microtsm": "https://cdn.jsdelivr.net/npm/microtsm@0.0.76/dist/main.js",
+        "@fewangsit/wangsvue-fats": "https://cdn.jsdelivr.net/npm/@fewangsit/wangsvue-fats@1.0.0-alpha.137/wangsvue-fats.js",
+        "@fewangsit/wangsvue-presets/fixedasset": "https://cdn.jsdelivr.net/npm/@fewangsit/wangsvue-presets@1.0.99-alpha.2/fixedasset/index.js",
+        "@tagsamurai/fats-api-services": "https://cdn.jsdelivr.net/npm/@tagsamurai/fats-api-services@1.0.0-alpha.173/api-services.es.js"
+    }
+}

@@ -1,0 +1,8 @@
+{
+    "imports": {
+        "@microtsm/vue-mfe-app": "http://localhost:4173/js/app.js",
+        "@microtsm/navbar": "http://localhost:4174/js/app.js",
+        "@microtsm/default-page": "http://localhost:4177/js/app.js",
+        "@microtsm/settings-mfe-app": "http://localhost:4179/js/app.js"
+    }
+}
