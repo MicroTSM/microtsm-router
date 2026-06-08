@@ -1,72 +1,72 @@
 import {
-  defineComponent,
-  h,
-  inject,
-  provide,
-  computed,
-  defineAsyncComponent,
-} from "vue";
-import {
-  routeLocationKey,
-  viewDepthKey,
-  matchedRouteKey,
-  routerViewLocationKey,
+  currentRoute,
+  type RouteRecord,
+  type MountableComponent,
 } from "./history";
 
-export const RouterView = defineComponent({
-  name: "RouterView",
-  props: {
-    name: {
-      type: String,
-      default: "default",
-    },
-    route: Object,
-  },
-  setup(props, { slots, attrs }) {
-    const injectedRoute = inject(routerViewLocationKey);
-    const routeToDisplay = computed(
-      () => props.route || injectedRoute?.value || inject(routeLocationKey),
-    );
+// ─── RouterView Web Component ─────────────────────────────────────────
 
-    const injectedDepth = inject(viewDepthKey, 0);
-    const depth = computed(() => {
-      return typeof injectedDepth === "object" &&
-        injectedDepth !== null &&
-        "value" in injectedDepth
-        ? (injectedDepth as any).value
-        : injectedDepth;
+class RouterViewElement extends HTMLElement {
+  private _unsubscribe?: () => void;
+  private _currentComponent?: MountableComponent;
+  private _depth: number = 0;
+
+  connectedCallback() {
+    // Calculate depth by counting ancestor <router-view> elements
+    this._depth = this._calculateDepth();
+
+    // Subscribe to route changes
+    this._unsubscribe = currentRoute.subscribe((newRoute) => {
+      this._renderMatchedComponent(newRoute.matched);
     });
 
-    const matchedRoute = computed(() => {
-      const route = routeToDisplay.value;
-      return route && route.matched ? route.matched[depth.value] : undefined;
-    });
+    // Initial render
+    this._renderMatchedComponent(currentRoute.value.matched);
+  }
 
-    provide(
-      viewDepthKey,
-      computed(() => depth.value + 1),
-    );
-    provide(matchedRouteKey, matchedRoute);
-    provide(routerViewLocationKey, routeToDisplay);
+  disconnectedCallback() {
+    this._unmountCurrent();
+    this._unsubscribe?.();
+  }
 
-    return () => {
-      const route = routeToDisplay.value;
-      const matched = matchedRoute.value;
-      let ViewComponent = matched ? matched.component : undefined;
+  private _calculateDepth(): number {
+    let depth = 0;
+    let parent = this.parentElement;
+    while (parent) {
+      if (parent.tagName === "ROUTER-VIEW") depth++;
+      parent = parent.parentElement;
+    }
+    return depth;
+  }
 
-      if (!ViewComponent) {
-        return slots.default ? slots.default({ Component: null, route }) : null;
-      }
+  private async _renderMatchedComponent(matched: RouteRecord[]) {
+    const matchedRoute = matched[this._depth];
+    const newComponent = matchedRoute?.component;
 
-      if (typeof ViewComponent === "function") {
-        ViewComponent = defineAsyncComponent(ViewComponent);
-      }
+    // Same component — skip
+    if (newComponent === this._currentComponent) return;
 
-      const component = h(ViewComponent, Object.assign({}, attrs));
+    // Unmount old
+    this._unmountCurrent();
 
-      return slots.default
-        ? slots.default({ Component: component, route })
-        : component;
-    };
-  },
-});
+    // Mount new
+    if (newComponent?.mount) {
+      this._currentComponent = newComponent;
+      await newComponent.mount(this);
+    }
+  }
+
+  private _unmountCurrent() {
+    if (this._currentComponent?.unmount) {
+      this._currentComponent.unmount(this);
+      this._currentComponent = undefined;
+    }
+  }
+}
+
+// Register the custom element
+if (!customElements.get("router-view")) {
+  customElements.define("router-view", RouterViewElement);
+}
+
+export { RouterViewElement as RouterView };

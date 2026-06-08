@@ -23,9 +23,6 @@ importers:
       vite-plugin-dts:
         specifier: ^5.0.2
         version: 5.0.2(@microsoft/api-extractor@7.58.7(@types/node@25.9.1))(rolldown@1.0.3)(rollup@4.61.1)(typescript@6.0.3)(vite@8.0.16(@types/node@25.9.1))
-      vue:
-        specifier: ^3.5.35
-        version: 3.5.35(typescript@6.0.3)
 
   playground/default-page:
     dependencies:

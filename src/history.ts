@@ -1,10 +1,56 @@
-import { shallowRef, type InjectionKey } from "vue";
 import { matchRoute } from "./matcher";
+
+// ─── Reactive Route (replaces Vue's shallowRef) ───────────────────────
+
+export type RouteSubscriber = (
+  newRoute: RouteLocation,
+  oldRoute: RouteLocation
+) => void;
+
+export interface ReactiveRoute {
+  value: RouteLocation;
+  subscribe(cb: RouteSubscriber): () => void;
+}
+
+function createReactiveRoute(initial: RouteLocation): ReactiveRoute {
+  let _value = initial;
+  const _subscribers = new Set<RouteSubscriber>();
+
+  return new Proxy({} as ReactiveRoute, {
+    get(_target, prop) {
+      if (prop === "value") return _value;
+      if (prop === "subscribe")
+        return (cb: RouteSubscriber) => {
+          _subscribers.add(cb);
+          return () => {
+            _subscribers.delete(cb);
+          };
+        };
+      return undefined;
+    },
+    set(_target, prop, newValue) {
+      if (prop === "value") {
+        const oldValue = _value;
+        _value = newValue;
+        _subscribers.forEach((cb) => cb(newValue, oldValue));
+        return true;
+      }
+      return false;
+    },
+  });
+}
+
+// ─── Types ────────────────────────────────────────────────────────────
+
+export interface MountableComponent {
+  mount(container: HTMLElement): void | Promise<void>;
+  unmount(container: HTMLElement): void | Promise<void>;
+}
 
 export interface RouteRecord {
   path: string;
   name?: string | null;
-  component?: any;
+  component?: MountableComponent;
   meta?: any;
   redirect?: any;
   children?: RouteRecord[];
@@ -22,9 +68,11 @@ export interface RouteLocation {
   redirectedFrom?: RouteLocation;
 }
 
+// ─── Global State ─────────────────────────────────────────────────────
+
 export let globalRoutes: RouteRecord[] = [];
 
-export const currentRoute = shallowRef<RouteLocation>({
+export const currentRoute = createReactiveRoute({
   path: window.location.pathname,
   fullPath:
     window.location.pathname + window.location.search + window.location.hash,
@@ -37,16 +85,15 @@ export const currentRoute = shallowRef<RouteLocation>({
   redirectedFrom: undefined,
 });
 
-export const routerKey = Symbol("router") as InjectionKey<any>;
-export const routeLocationKey = Symbol("route location") as InjectionKey<any>;
-export const routerViewLocationKey = Symbol(
-  "router view location",
-) as InjectionKey<any>;
-export const matchedRouteKey = Symbol(
-  "router view location matched",
-) as InjectionKey<any>;
-export const viewDepthKey = Symbol("router view depth") as InjectionKey<any>;
-export const ROUTER_KEY = Symbol("microtsm-router") as InjectionKey<any>;
+// Plain symbols (no Vue InjectionKey)
+export const routerKey = Symbol("router");
+export const routeLocationKey = Symbol("route location");
+export const routerViewLocationKey = Symbol("router view location");
+export const matchedRouteKey = Symbol("router view location matched");
+export const viewDepthKey = Symbol("router view depth");
+export const ROUTER_KEY = Symbol("microtsm-router");
+
+// ─── Query Parsing ────────────────────────────────────────────────────
 
 export function parseQuery(search: string): Record<string, any> {
   const query: Record<string, any> = {};
@@ -66,6 +113,8 @@ export function parseQuery(search: string): Record<string, any> {
   });
   return query;
 }
+
+// ─── Route Update ─────────────────────────────────────────────────────
 
 export function updateCurrentRoute(path: string) {
   let pathname = path;
@@ -116,6 +165,8 @@ export function updateCurrentRoute(path: string) {
   };
   window.dispatchEvent(new CustomEvent("microtsm:router-change", { detail: { path: matchedPath + search + hash } }));
 }
+
+// ─── Router Object ────────────────────────────────────────────────────
 
 export const router = {
   currentRoute,
@@ -229,6 +280,8 @@ export const router = {
 
   install: null as any,
 };
+
+// ─── Popstate Listener ────────────────────────────────────────────────
 
 window.addEventListener("popstate", () => {
   const fullPath =

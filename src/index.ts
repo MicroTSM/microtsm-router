@@ -1,4 +1,3 @@
-import { inject, type App, shallowReactive } from 'vue';
 import {
   currentRoute,
   globalRoutes,
@@ -11,7 +10,10 @@ import {
   ROUTER_KEY,
   router,
   type RouteRecord,
-  type RouteLocation
+  type RouteLocation,
+  type MountableComponent,
+  type ReactiveRoute,
+  type RouteSubscriber,
 } from './history';
 import { RouterLink, useLink } from './RouterLink';
 import { RouterView } from './RouterView';
@@ -27,7 +29,7 @@ export {
   ROUTER_KEY,
   router
 };
-export type { RouteRecord, RouteLocation };
+export type { RouteRecord, RouteLocation, MountableComponent, ReactiveRoute, RouteSubscriber };
 export { RouterLink, RouterView, useLink };
 export { isNavigationFailure, NavigationFailureType, ErrorTypes } from './errors';
 
@@ -35,31 +37,6 @@ export interface RouterOptions {
   history?: any;
   routes: RouteRecord[];
 }
-
-router.install = function (app: App) {
-  const reactiveRoute = {} as any;
-  const routeKeys = ['path', 'name', 'params', 'query', 'hash', 'fullPath', 'matched', 'meta', 'redirectedFrom'];
-  for (const key of routeKeys) {
-    Object.defineProperty(reactiveRoute, key, {
-      get: () => currentRoute.value[key as keyof RouteLocation],
-      enumerable: true,
-    });
-  }
-
-  app.provide(routerKey, this);
-  app.provide(routeLocationKey, shallowReactive(reactiveRoute));
-  app.provide(routerViewLocationKey, currentRoute);
-  app.provide(ROUTER_KEY, this);
-
-  app.component('RouterView', RouterView);
-  app.component('RouterLink', RouterLink);
-
-  app.config.globalProperties.$router = this;
-  Object.defineProperty(app.config.globalProperties, '$route', {
-    enumerable: true,
-    get: () => currentRoute.value
-  });
-};
 
 export function createRouter(options: RouterOptions) {
   if (options.routes) {
@@ -169,18 +146,9 @@ export function createMemoryHistory(base = '') {
 }
 
 export function useRouter() {
-  return inject(routerKey) || router;
-}
-
-const reactiveRoute = {} as any;
-const routeKeys = ['path', 'name', 'params', 'query', 'hash', 'fullPath', 'matched', 'meta', 'redirectedFrom'];
-for (const key of routeKeys) {
-  Object.defineProperty(reactiveRoute, key, {
-    get: () => currentRoute.value[key as keyof RouteLocation],
-    enumerable: true,
-  });
+  return router;
 }
 
 export function useRoute() {
-  return inject(routeLocationKey) || reactiveRoute;
+  return currentRoute;
 }

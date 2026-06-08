@@ -1,112 +1,116 @@
-import { defineComponent, h, inject, computed, reactive, unref } from 'vue';
-import { routerKey, routeLocationKey, currentRoute, router as fallbackRouter } from './history';
+import { router, currentRoute } from "./history";
 
-const getLinkClass = (
-  propClass: string | undefined,
-  globalClass: string | undefined,
-  defaultClass: string
-): string =>
-  propClass != null
-    ? propClass
-    : globalClass != null
-      ? globalClass
-      : defaultClass;
+// ─── RouterLink Web Component ─────────────────────────────────────────
 
-export function useLink(props: any) {
-  const router = inject(routerKey) || fallbackRouter;
-  const currentRouteLoc = inject(routeLocationKey) || currentRoute;
+class RouterLinkElement extends HTMLElement {
+  private _unsubscribe?: () => void;
 
-  const route = computed(() => {
-    return router.resolve(unref(props.to));
-  });
-
-  const isActive = computed(() => {
-    const linkPath = route.value.path.replace(/\/+$/, '') || '/';
-    const currentPath = currentRouteLoc.path.replace(/\/+$/, '') || '/';
-    if (linkPath === '/') {
-      return currentPath === '/';
-    }
-    return currentPath === linkPath || currentPath.startsWith(linkPath + '/');
-  });
-
-  const isExactActive = computed(() => {
-    const linkPath = route.value.path.replace(/\/+$/, '') || '/';
-    const currentPath = currentRouteLoc.path.replace(/\/+$/, '') || '/';
-    return currentPath === linkPath;
-  });
-
-  function navigate(e: MouseEvent = {} as MouseEvent) {
-    if (e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return Promise.resolve();
-    if (e.defaultPrevented) return Promise.resolve();
-    if (e.button !== undefined && e.button !== 0) return Promise.resolve();
-    if (e.currentTarget && (e.currentTarget as any).getAttribute) {
-      const target = (e.currentTarget as any).getAttribute('target');
-      if (/\b_blank\b/i.test(target)) return Promise.resolve();
-    }
-    if (e.preventDefault) e.preventDefault();
-
-    const path = route.value.fullPath;
-    const method = unref(props.replace) ? 'replace' : 'push';
-    return router[method](path);
+  static get observedAttributes() {
+    return ["to", "replace"];
   }
 
+  connectedCallback() {
+    this._render();
+    this._unsubscribe = currentRoute.subscribe(() =>
+      this._updateActiveState()
+    );
+    this._updateActiveState();
+  }
+
+  disconnectedCallback() {
+    this._unsubscribe?.();
+  }
+
+  attributeChangedCallback() {
+    this._updateActiveState();
+  }
+
+  private _render() {
+    // If no <a> child exists, wrap content in one
+    if (!this.querySelector("a")) {
+      const anchor = document.createElement("a");
+      anchor.href = this.getAttribute("to") || "";
+      // Move existing children into the anchor
+      while (this.firstChild) anchor.appendChild(this.firstChild);
+      this.appendChild(anchor);
+    }
+
+    this.addEventListener("click", (e) => {
+      const target = this.getAttribute("to");
+      if (!target) return;
+
+      // Don't intercept modified clicks (Ctrl+click, etc.)
+      if (e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
+      e.preventDefault();
+
+      const method = this.hasAttribute("replace") ? "replace" : "push";
+      router[method](target);
+    });
+  }
+
+  private _updateActiveState() {
+    const to = this.getAttribute("to");
+    if (!to) return;
+
+    const resolved = router.resolve(to);
+    const currentPath =
+      currentRoute.value.path.replace(/\/+$/, "") || "/";
+    const linkPath = resolved.path.replace(/\/+$/, "") || "/";
+
+    const isExact = currentPath === linkPath;
+    const isActive =
+      linkPath === "/"
+        ? currentPath === "/"
+        : currentPath === linkPath ||
+          currentPath.startsWith(linkPath + "/");
+
+    this.classList.toggle("router-link-active", isActive);
+    this.classList.toggle("router-link-exact-active", isExact);
+
+    const anchor = this.querySelector("a");
+    if (anchor) {
+      anchor.setAttribute("href", resolved.fullPath || to);
+      if (isExact) {
+        anchor.setAttribute("aria-current", "page");
+      } else {
+        anchor.removeAttribute("aria-current");
+      }
+    }
+  }
+}
+
+// Register the custom element
+if (!customElements.get("router-link")) {
+  customElements.define("router-link", RouterLinkElement);
+}
+
+// ─── useLink (pure TS utility) ────────────────────────────────────────
+
+export function useLink(props: { to: string; replace?: boolean }) {
+  const resolved = router.resolve(props.to);
+  const currentPath =
+    currentRoute.value.path.replace(/\/+$/, "") || "/";
+  const linkPath = resolved.path.replace(/\/+$/, "") || "/";
+
+  const isExact = currentPath === linkPath;
+  const isActive =
+    linkPath === "/"
+      ? currentPath === "/"
+      : currentPath === linkPath ||
+        currentPath.startsWith(linkPath + "/");
+
   return {
-    route,
-    href: computed(() => route.value.href),
+    route: resolved,
+    href: resolved.fullPath,
     isActive,
-    isExactActive,
-    navigate
+    isExactActive: isExact,
+    navigate: (e?: MouseEvent) => {
+      if (e?.metaKey || e?.altKey || e?.ctrlKey || e?.shiftKey) return;
+      e?.preventDefault();
+      const method = props.replace ? "replace" : "push";
+      return router[method](props.to);
+    },
   };
 }
 
-export const RouterLink = defineComponent({
-  name: 'RouterLink',
-  props: {
-    to: {
-      type: [String, Object],
-      required: true,
-    },
-    replace: Boolean,
-    activeClass: String,
-    exactActiveClass: String,
-    custom: Boolean,
-    ariaCurrentValue: {
-      type: String,
-      default: 'page',
-    }
-  },
-  setup(props, { slots }) {
-    const link = reactive(useLink(props));
-    const router = inject(routerKey) || fallbackRouter;
-
-    const elClass = computed(() => ({
-      [getLinkClass(
-        props.activeClass,
-        router.options?.linkActiveClass,
-        'router-link-active'
-      )]: link.isActive,
-      [getLinkClass(
-        props.exactActiveClass,
-        router.options?.linkExactActiveClass,
-        'router-link-exact-active'
-      )]: link.isExactActive,
-    }));
-
-    return () => {
-      const children = slots.default ? slots.default(link) : [];
-      const singleChild = children.length === 1 ? children[0] : children;
-      return props.custom
-        ? singleChild
-        : h(
-            'a',
-            {
-              'aria-current': link.isExactActive ? props.ariaCurrentValue : null,
-              href: link.href,
-              onClick: link.navigate,
-              class: elClass.value,
-            },
-            children
-          );
-    };
-  },
-});
+export { RouterLinkElement as RouterLink };

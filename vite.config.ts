@@ -11,13 +11,7 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      // STRICT REQUIREMENT: Add 'vue' to build.rollupOptions.external so it is NOT bundled
-      external: ["vue"],
-      output: {
-        globals: {
-          vue: "Vue",
-        },
-      },
+      // No external dependencies — this is a pure TS library
     },
   },
   plugins: [
