@@ -1,4 +1,5 @@
 import { MicroTSMRootApp } from "microtsm";
+import "@microtsm/router";
 import layout from "./layout.html?raw";
 
 // Initialize the MicroTSM app with the required layout

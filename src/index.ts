@@ -13,6 +13,7 @@ import {
   currentRouteProxy,
   VueInstance,
   vueRouteObject,
+  getGlobalRouterState,
   type RouteRecord,
   type RouteLocation,
   type RouteComponent,
@@ -33,6 +34,7 @@ export {
   ROUTER_KEY,
   router,
   registerVue,
+  getGlobalRouterState,
 };
 export type {
   RouteRecord,
@@ -60,7 +62,7 @@ export interface RouterOptions {
 export function createRouter(options: RouterOptions) {
   if (options.routes) {
     for (const route of options.routes) {
-      const existingIdx = globalRoutes.findIndex((r) => r.path === route.path);
+      const existingIdx = globalRoutes.findIndex((r: RouteRecord) => r.path === route.path);
       if (existingIdx >= 0) {
         globalRoutes[existingIdx] = route;
       } else {

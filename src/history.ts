@@ -70,9 +70,7 @@ export interface RouteLocation {
 
 // ─── Global State ─────────────────────────────────────────────────────
 
-export let globalRoutes: RouteRecord[] = [];
-
-export const currentRoute = createReactiveRoute({
+const DEFAULT_ROUTE: RouteLocation = {
   path: window.location.pathname,
   fullPath:
     window.location.pathname + window.location.search + window.location.hash,
@@ -83,7 +81,27 @@ export const currentRoute = createReactiveRoute({
   matched: [],
   meta: {},
   redirectedFrom: undefined,
-});
+};
+
+export function getGlobalRouterState() {
+  if (!(window as any).__MICROTSM_ROUTER__) {
+    (window as any).__MICROTSM_ROUTER__ = {
+      globalRoutes: [] as RouteRecord[],
+      currentRoute: createReactiveRoute(DEFAULT_ROUTE),
+      middlewares: new Set<(to: URL) => Promise<boolean> | boolean>(),
+      isNavigationCanceled: false,
+      isHistoryPatched: false,
+      originalPushState: window.history.pushState.bind(window.history),
+      originalReplaceState: window.history.replaceState.bind(window.history),
+    };
+  }
+  return (window as any).__MICROTSM_ROUTER__;
+}
+
+const globalState = getGlobalRouterState();
+
+export const globalRoutes = globalState.globalRoutes;
+export const currentRoute = globalState.currentRoute;
 
 // Plain symbols (no Vue InjectionKey)
 export const routerKey = Symbol("router");
@@ -114,7 +132,7 @@ export function registerVue(Vue: any) {
     redirectedFrom: currentRoute.value.redirectedFrom,
   });
 
-  currentRoute.subscribe((newRoute) => {
+  currentRoute.subscribe((newRoute: RouteLocation) => {
     if (vueRouteRef) vueRouteRef.value = newRoute;
     if (vueRouteObject) {
       vueRouteObject.path = newRoute.path;
@@ -202,7 +220,9 @@ export function updateCurrentRoute(path: string) {
 
   const fullPath = matchedPath + search + hash;
   if (matchedPath !== pathname || !window.history.state) {
-    window.history.replaceState(
+    const globalState = getGlobalRouterState();
+    globalState.originalReplaceState.call(
+      window.history,
       { current: fullPath, ...(window.history.state || {}) },
       "",
       fullPath,
@@ -312,12 +332,6 @@ export const router = {
       "",
       resolved.fullPath,
     );
-    currentRoute.value = resolved;
-    window.dispatchEvent(
-      new CustomEvent("microtsm:router-change", {
-        detail: { path: resolved.fullPath },
-      }),
-    );
   },
 
   async replace(to: any): Promise<void> {
@@ -326,12 +340,6 @@ export const router = {
       { current: resolved.fullPath },
       "",
       resolved.fullPath,
-    );
-    currentRoute.value = resolved;
-    window.dispatchEvent(
-      new CustomEvent("microtsm:router-change", {
-        detail: { path: resolved.fullPath },
-      }),
     );
   },
 
@@ -366,12 +374,118 @@ export const router = {
   install: null as any,
 };
 
-// ─── Popstate Listener ────────────────────────────────────────────────
+// ─── History API Patching & Middlewares ────────────────────────────────
 
-window.addEventListener("popstate", () => {
-  const fullPath =
-    window.location.pathname + window.location.search + window.location.hash;
-  updateCurrentRoute(fullPath);
+export function patchHistoryStateEvents() {
+  const globalState = getGlobalRouterState();
+  if (globalState.isHistoryPatched) return;
+
+  console.log("🔧 patchHistoryStateEvents: Modifying history.pushState and history.replaceState.");
+
+  window.history.pushState = (...args) => {
+    const payload = {
+      to: new URL(args[2] ?? window.location.pathname, window.location.origin),
+      from: new URL(window.location.href),
+      cancelNavigation: () => {
+        globalState.isNavigationCanceled = true;
+      },
+    };
+
+    if (payload.to.href !== payload.from.href) {
+      window.dispatchEvent(
+        new CustomEvent("microtsm:before-navigation-event", { detail: payload })
+      );
+    }
+
+    runMiddlewares(payload.to).then((isAllowed) => {
+      if (isAllowed) {
+        if (!globalState.isNavigationCanceled) {
+          console.log("📢 pushState triggered in router:", args);
+          globalState.originalPushState.apply(window.history, args);
+
+          if (payload.to.href !== payload.from.href) {
+            window.dispatchEvent(
+              new CustomEvent("microtsm:navigation-event", { detail: payload })
+            );
+          }
+
+          const fullPath = payload.to.pathname + payload.to.search + payload.to.hash;
+          updateCurrentRoute(fullPath);
+        }
+        globalState.isNavigationCanceled = false;
+      }
+    });
+  };
+
+  window.history.replaceState = (...args) => {
+    const payload = {
+      to: new URL(args[2] ?? window.location.pathname, window.location.origin),
+      from: new URL(window.location.href),
+      cancelNavigation: () => {
+        globalState.isNavigationCanceled = true;
+      },
+    };
+
+    if (payload.to.href !== payload.from.href) {
+      window.dispatchEvent(
+        new CustomEvent("microtsm:before-navigation-event", { detail: payload })
+      );
+    }
+
+    runMiddlewares(payload.to).then((isAllowed) => {
+      if (isAllowed) {
+        if (!globalState.isNavigationCanceled) {
+          console.log("📢 replaceState triggered in router:", args);
+          globalState.originalReplaceState.apply(window.history, args);
+
+          if (payload.to.href !== payload.from.href) {
+            window.dispatchEvent(
+              new CustomEvent("microtsm:navigation-event", { detail: payload })
+            );
+          }
+
+          const fullPath = payload.to.pathname + payload.to.search + payload.to.hash;
+          updateCurrentRoute(fullPath);
+        }
+        globalState.isNavigationCanceled = false;
+      }
+    });
+  };
+
+  globalState.isHistoryPatched = true;
+}
+
+export async function runMiddlewares(to: URL): Promise<boolean> {
+  const globalState = getGlobalRouterState();
+  for (const middleware of globalState.middlewares) {
+    const isAllowed = await middleware(to);
+    if (!isAllowed) {
+      console.warn(`🚫 Route blocked by global middleware: ${to.pathname}`);
+      return false;
+    }
+  }
+  return true;
+}
+
+// ─── Event Listeners ──────────────────────────────────────────────────
+
+window.addEventListener("popstate", (e) => {
+  const toUrl = new URL(window.location.href);
+  runMiddlewares(toUrl).then((isAllowed) => {
+    if (isAllowed) {
+      const fullPath = toUrl.pathname + toUrl.search + toUrl.hash;
+      updateCurrentRoute(fullPath);
+    } else {
+      const globalState = getGlobalRouterState();
+      const previousFullPath = globalState.currentRoute.value.fullPath;
+      globalState.originalReplaceState.call(
+        window.history,
+        e.state,
+        "",
+        previousFullPath
+      );
+    }
+  });
 });
 
 window.addEventListener("microtsm:navigation-event", ((e: Event) => {
@@ -382,3 +496,6 @@ window.addEventListener("microtsm:navigation-event", ((e: Event) => {
     updateCurrentRoute(fullPath);
   }
 }) as EventListener);
+
+// Initialize global history patch immediately upon module load
+patchHistoryStateEvents();

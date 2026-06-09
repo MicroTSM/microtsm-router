@@ -1,4 +1,4 @@
-import { currentRoute, type RouteRecord, type RouteComponent } from "./history";
+import { currentRoute, type RouteRecord, type RouteComponent, type RouteLocation } from "./history";
 
 // ─── RouterView Web Component ─────────────────────────────────────────
 
@@ -12,7 +12,7 @@ class RouterViewElement extends HTMLElement {
     this._depth = this._calculateDepth();
 
     // Subscribe to route changes
-    this._unsubscribe = currentRoute.subscribe((newRoute) => {
+    this._unsubscribe = currentRoute.subscribe((newRoute: RouteLocation) => {
       this._renderMatchedComponent(newRoute.matched);
     });
 
