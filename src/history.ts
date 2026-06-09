@@ -89,6 +89,9 @@ export function getGlobalRouterState() {
       globalRoutes: [] as RouteRecord[],
       currentRoute: createReactiveRoute(DEFAULT_ROUTE),
       middlewares: new Set<(to: URL) => Promise<boolean> | boolean>(),
+      beforeEachGuards: new Set<any>(),
+      beforeResolveGuards: new Set<any>(),
+      afterEachHooks: new Set<any>(),
       isNavigationCanceled: false,
       isHistoryPatched: false,
       originalPushState: window.history.pushState.bind(window.history),
@@ -229,6 +232,7 @@ export function updateCurrentRoute(path: string) {
     );
   }
 
+  const previousRoute = { ...currentRoute.value };
   currentRoute.value = {
     path: matchedPath,
     fullPath: matchedPath + search + hash,
@@ -242,6 +246,17 @@ export function updateCurrentRoute(path: string) {
       : {},
     redirectedFrom: undefined,
   };
+
+  const toRoute = currentRoute.value;
+  const globalState = getGlobalRouterState();
+  for (const hook of globalState.afterEachHooks) {
+    try {
+      hook(toRoute, previousRoute);
+    } catch (err) {
+      console.error("Error in afterEach hook:", err);
+    }
+  }
+
   window.dispatchEvent(
     new CustomEvent("microtsm:router-change", {
       detail: { path: matchedPath + search + hash },
@@ -355,14 +370,26 @@ export const router = {
     window.history.go(delta);
   },
 
-  beforeEach(_guard: any) {
-    return () => {};
+  beforeEach(guard: any) {
+    const globalState = getGlobalRouterState();
+    globalState.beforeEachGuards.add(guard);
+    return () => {
+      globalState.beforeEachGuards.delete(guard);
+    };
   },
-  beforeResolve(_guard: any) {
-    return () => {};
+  beforeResolve(guard: any) {
+    const globalState = getGlobalRouterState();
+    globalState.beforeResolveGuards.add(guard);
+    return () => {
+      globalState.beforeResolveGuards.delete(guard);
+    };
   },
-  afterEach(_guard: any) {
-    return () => {};
+  afterEach(hook: any) {
+    const globalState = getGlobalRouterState();
+    globalState.afterEachHooks.add(hook);
+    return () => {
+      globalState.afterEachHooks.delete(hook);
+    };
   },
   onError(_handler: any) {
     return () => {};
@@ -455,6 +482,52 @@ export function patchHistoryStateEvents() {
   globalState.isHistoryPatched = true;
 }
 
+export async function runVueNavigationGuards(toUrl: URL): Promise<boolean | string | object> {
+  const globalState = getGlobalRouterState();
+  const toRoute = router.resolve(toUrl.pathname + toUrl.search + toUrl.hash);
+  const fromRoute = globalState.currentRoute.value;
+
+  // 1. Run beforeEach guards
+  for (const guard of globalState.beforeEachGuards) {
+    let result: any;
+    if (guard.length >= 3) {
+      result = await new Promise((resolve) => {
+        guard(toRoute, fromRoute, (nextResult: any) => {
+          resolve(nextResult !== undefined ? nextResult : true);
+        });
+      });
+    } else {
+      result = await guard(toRoute, fromRoute);
+    }
+
+    if (result === false) return false;
+    if (typeof result === "string" || (result && typeof result === "object")) {
+      return result;
+    }
+  }
+
+  // 2. Run beforeResolve guards
+  for (const guard of globalState.beforeResolveGuards) {
+    let result: any;
+    if (guard.length >= 3) {
+      result = await new Promise((resolve) => {
+        guard(toRoute, fromRoute, (nextResult: any) => {
+          resolve(nextResult !== undefined ? nextResult : true);
+        });
+      });
+    } else {
+      result = await guard(toRoute, fromRoute);
+    }
+
+    if (result === false) return false;
+    if (typeof result === "string" || (result && typeof result === "object")) {
+      return result;
+    }
+  }
+
+  return true;
+}
+
 export async function runMiddlewares(to: URL): Promise<boolean> {
   const globalState = getGlobalRouterState();
   for (const middleware of globalState.middlewares) {
@@ -464,6 +537,20 @@ export async function runMiddlewares(to: URL): Promise<boolean> {
       return false;
     }
   }
+
+  const guardResult = await runVueNavigationGuards(to);
+  if (guardResult === false) {
+    console.warn(`🚫 Route blocked by router navigation guards: ${to.pathname}`);
+    return false;
+  }
+  if (typeof guardResult === "string" || (guardResult && typeof guardResult === "object")) {
+    console.log(`🔄 Redirecting to:`, guardResult);
+    setTimeout(() => {
+      router.push(guardResult);
+    }, 0);
+    return false;
+  }
+
   return true;
 }
 

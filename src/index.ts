@@ -203,3 +203,29 @@ export function useRoute() {
   }
   return currentRouteProxy;
 }
+
+// ─── Vue Router Compatibility Stubs ───────────────────────────────────
+
+export function onBeforeRouteLeave(_leaveGuard: any) {
+  // Safe stub for Vue Router hook compatibility
+}
+
+export function onBeforeRouteUpdate(_updateGuard: any) {
+  // Safe stub for Vue Router hook compatibility
+}
+
+export type RouteLocationRaw = string | {
+  path?: string;
+  name?: string | null;
+  params?: Record<string, string>;
+  query?: Record<string, any>;
+  hash?: string;
+};
+
+export type NavigationGuard = (
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalizedLoaded,
+  next: (to?: any) => void
+) => any;
+
+export type RouteMeta = any;
