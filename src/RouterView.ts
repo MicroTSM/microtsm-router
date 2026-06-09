@@ -1,14 +1,10 @@
-import {
-  currentRoute,
-  type RouteRecord,
-  type MountableComponent,
-} from "./history";
+import { currentRoute, type RouteRecord, type RouteComponent } from "./history";
 
 // ─── RouterView Web Component ─────────────────────────────────────────
 
 class RouterViewElement extends HTMLElement {
   private _unsubscribe?: () => void;
-  private _currentComponent?: MountableComponent;
+  private _currentComponent?: RouteComponent;
   private _depth: number = 0;
 
   connectedCallback() {

@@ -9,14 +9,18 @@ import {
   viewDepthKey,
   ROUTER_KEY,
   router,
+  registerVue,
+  currentRouteProxy,
+  VueInstance,
+  vueRouteObject,
   type RouteRecord,
   type RouteLocation,
-  type MountableComponent,
+  type RouteComponent,
   type ReactiveRoute,
   type RouteSubscriber,
-} from './history';
-import { RouterLink, useLink } from './RouterLink';
-import { RouterView } from './RouterView';
+} from "./history";
+import { RouterLink, useLink } from "./RouterLink";
+import { RouterView } from "./RouterView";
 
 export {
   currentRoute,
@@ -27,11 +31,26 @@ export {
   matchedRouteKey,
   viewDepthKey,
   ROUTER_KEY,
-  router
+  router,
+  registerVue,
 };
-export type { RouteRecord, RouteLocation, MountableComponent, ReactiveRoute, RouteSubscriber };
+export type {
+  RouteRecord,
+  RouteLocation,
+  RouteComponent as MountableComponent,
+  ReactiveRoute,
+  RouteSubscriber,
+};
+export type Router = typeof router;
+export type RouteLocationNormalized = RouteLocation;
+export type RouteLocationNormalizedLoaded = RouteLocation;
+export type RouteRecordRaw = RouteRecord;
 export { RouterLink, RouterView, useLink };
-export { isNavigationFailure, NavigationFailureType, ErrorTypes } from './errors';
+export {
+  isNavigationFailure,
+  NavigationFailureType,
+  ErrorTypes,
+} from "./errors";
 
 export interface RouterOptions {
   history?: any;
@@ -41,7 +60,7 @@ export interface RouterOptions {
 export function createRouter(options: RouterOptions) {
   if (options.routes) {
     for (const route of options.routes) {
-      const existingIdx = globalRoutes.findIndex(r => r.path === route.path);
+      const existingIdx = globalRoutes.findIndex((r) => r.path === route.path);
       if (existingIdx >= 0) {
         globalRoutes[existingIdx] = route;
       } else {
@@ -51,79 +70,106 @@ export function createRouter(options: RouterOptions) {
   }
   router.options = options;
 
-  const initialPath = window.location.pathname + window.location.search + window.location.hash;
+  const initialPath =
+    window.location.pathname + window.location.search + window.location.hash;
   updateCurrentRoute(initialPath);
 
   return router;
 }
 
-export function createWebHistory(base = '') {
+export function createWebHistory(base = "") {
   return {
     base,
-    get location() { return window.location.pathname + window.location.search + window.location.hash; },
-    get state() { return window.history.state; },
+    get location() {
+      return (
+        window.location.pathname + window.location.search + window.location.hash
+      );
+    },
+    get state() {
+      return window.history.state;
+    },
     push(to: string, _data?: any) {
       const state = _data ? { ..._data, current: to } : { current: to };
-      window.history.pushState(state, '', to);
+      window.history.pushState(state, "", to);
     },
     replace(to: string, _data?: any) {
       const state = _data ? { ..._data, current: to } : { current: to };
-      window.history.replaceState(state, '', to);
+      window.history.replaceState(state, "", to);
     },
     go(delta: number) {
       window.history.go(delta);
     },
     listen(callback: any) {
       const handler = () => {
-        callback(this.location, this.location, { type: 'pop', direction: '', delta: 0 } as any);
+        callback(this.location, this.location, {
+          type: "pop",
+          direction: "",
+          delta: 0,
+        } as any);
       };
-      window.addEventListener('popstate', handler);
-      return () => window.removeEventListener('popstate', handler);
+      window.addEventListener("popstate", handler);
+      return () => window.removeEventListener("popstate", handler);
     },
     createHref(location: string) {
       return base + location;
     },
-    destroy() {}
+    destroy() {},
   };
 }
 
-export function createWebHashHistory(base = '') {
+export function createWebHashHistory(base = "") {
   return {
     base,
-    get location() { return window.location.hash.slice(1) || '/'; },
-    get state() { return window.history.state; },
+    get location() {
+      return window.location.hash.slice(1) || "/";
+    },
+    get state() {
+      return window.history.state;
+    },
     push(to: string, _data?: any) {
-      const state = _data ? { ..._data, current: '#' + to } : { current: '#' + to };
-      window.history.pushState(state, '', '#' + to);
+      const state = _data
+        ? { ..._data, current: "#" + to }
+        : { current: "#" + to };
+      window.history.pushState(state, "", "#" + to);
     },
     replace(to: string, _data?: any) {
-      const state = _data ? { ..._data, current: '#' + to } : { current: '#' + to };
-      window.history.replaceState(state, '', '#' + to);
+      const state = _data
+        ? { ..._data, current: "#" + to }
+        : { current: "#" + to };
+      window.history.replaceState(state, "", "#" + to);
     },
     go(delta: number) {
       window.history.go(delta);
     },
     listen(callback: any) {
       const handler = () => {
-        callback(this.location, this.location, { type: 'pop', direction: '', delta: 0 } as any);
+        callback(this.location, this.location, {
+          type: "pop",
+          direction: "",
+          delta: 0,
+        } as any);
       };
-      window.addEventListener('popstate', handler);
-      return () => window.removeEventListener('popstate', handler);
+      window.addEventListener("popstate", handler);
+      return () => window.removeEventListener("popstate", handler);
     },
     createHref(location: string) {
-      return '#' + location;
+      return "#" + location;
     },
-    destroy() {}
+    destroy() {},
   };
 }
 
-export function createMemoryHistory(base = '') {
+export function createMemoryHistory(base = "") {
   let index = 0;
-  const entries = ['/'];
+  const entries = ["/"];
   return {
     base,
-    get location() { return entries[index]; },
-    get state() { return {}; },
+    get location() {
+      return entries[index];
+    },
+    get state() {
+      return {};
+    },
     push(to: string, _data?: any) {
       entries.splice(index + 1);
       entries.push(to);
@@ -141,7 +187,7 @@ export function createMemoryHistory(base = '') {
     createHref(location: string) {
       return location;
     },
-    destroy() {}
+    destroy() {},
   };
 }
 
@@ -150,5 +196,8 @@ export function useRouter() {
 }
 
 export function useRoute() {
-  return currentRoute;
+  if (VueInstance && vueRouteObject) {
+    return vueRouteObject;
+  }
+  return currentRouteProxy;
 }

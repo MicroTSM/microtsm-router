@@ -1,10 +1,10 @@
-import { matchRoute } from "./matcher";
+import { matchRoute, findFullPathByName } from "./matcher";
 
 // ─── Reactive Route (replaces Vue's shallowRef) ───────────────────────
 
 export type RouteSubscriber = (
   newRoute: RouteLocation,
-  oldRoute: RouteLocation
+  oldRoute: RouteLocation,
 ) => void;
 
 export interface ReactiveRoute {
@@ -42,7 +42,7 @@ function createReactiveRoute(initial: RouteLocation): ReactiveRoute {
 
 // ─── Types ────────────────────────────────────────────────────────────
 
-export interface MountableComponent {
+export interface RouteComponent {
   mount(container: HTMLElement): void | Promise<void>;
   unmount(container: HTMLElement): void | Promise<void>;
 }
@@ -50,7 +50,7 @@ export interface MountableComponent {
 export interface RouteRecord {
   path: string;
   name?: string | null;
-  component?: MountableComponent;
+  component?: RouteComponent;
   meta?: any;
   redirect?: any;
   children?: RouteRecord[];
@@ -92,6 +92,61 @@ export const routerViewLocationKey = Symbol("router view location");
 export const matchedRouteKey = Symbol("router view location matched");
 export const viewDepthKey = Symbol("router view depth");
 export const ROUTER_KEY = Symbol("microtsm-router");
+
+// ─── Vue Reactivity Bridge ───────────────────────────────────────────
+export let VueInstance: any = null;
+export let vueRouteRef: any = null;
+export let vueRouteObject: any = null;
+
+export function registerVue(Vue: any) {
+  VueInstance = Vue;
+  vueRouteRef = VueInstance.shallowRef(currentRoute.value);
+
+  vueRouteObject = VueInstance.reactive({
+    path: currentRoute.value.path,
+    fullPath: currentRoute.value.fullPath,
+    name: currentRoute.value.name,
+    params: currentRoute.value.params,
+    query: currentRoute.value.query,
+    hash: currentRoute.value.hash,
+    matched: currentRoute.value.matched,
+    meta: currentRoute.value.meta,
+    redirectedFrom: currentRoute.value.redirectedFrom,
+  });
+
+  currentRoute.subscribe((newRoute) => {
+    if (vueRouteRef) vueRouteRef.value = newRoute;
+    if (vueRouteObject) {
+      vueRouteObject.path = newRoute.path;
+      vueRouteObject.fullPath = newRoute.fullPath;
+      vueRouteObject.name = newRoute.name;
+      vueRouteObject.params = newRoute.params;
+      vueRouteObject.query = newRoute.query;
+      vueRouteObject.hash = newRoute.hash;
+      vueRouteObject.matched = newRoute.matched;
+      vueRouteObject.meta = newRoute.meta;
+      vueRouteObject.redirectedFrom = newRoute.redirectedFrom;
+    }
+  });
+
+  router.install = (app: any) => {
+    app.provide(routerKey, router);
+    app.provide(routeLocationKey, vueRouteObject);
+    app.config.globalProperties.$router = router;
+    app.config.globalProperties.$route = vueRouteObject;
+  };
+}
+
+export const currentRouteProxy = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (prop === "value") return currentRoute.value;
+      if (prop === "subscribe") return currentRoute.subscribe;
+      return (currentRoute.value as any)[prop];
+    },
+  },
+) as any;
 
 // ─── Query Parsing ────────────────────────────────────────────────────
 
@@ -144,10 +199,14 @@ export function updateCurrentRoute(path: string) {
   if (match) {
     matchedPath = match.path;
   }
-  
+
   const fullPath = matchedPath + search + hash;
   if (matchedPath !== pathname || !window.history.state) {
-    window.history.replaceState({ current: fullPath, ...(window.history.state || {}) }, "", fullPath);
+    window.history.replaceState(
+      { current: fullPath, ...(window.history.state || {}) },
+      "",
+      fullPath,
+    );
   }
 
   currentRoute.value = {
@@ -163,13 +222,19 @@ export function updateCurrentRoute(path: string) {
       : {},
     redirectedFrom: undefined,
   };
-  window.dispatchEvent(new CustomEvent("microtsm:router-change", { detail: { path: matchedPath + search + hash } }));
+  window.dispatchEvent(
+    new CustomEvent("microtsm:router-change", {
+      detail: { path: matchedPath + search + hash },
+    }),
+  );
 }
 
 // ─── Router Object ────────────────────────────────────────────────────
 
 export const router = {
-  currentRoute,
+  get currentRoute() {
+    return vueRouteRef || currentRoute;
+  },
   listening: true,
   options: {
     history: null,
@@ -191,7 +256,19 @@ export const router = {
     if (typeof to === "string") {
       path = to;
     } else if (to && typeof to === "object") {
-      path = to.path || "";
+      if (to.name) {
+        const resolvedPath = findFullPathByName(globalRoutes, to.name);
+        path = resolvedPath || "";
+      } else {
+        path = to.path || "";
+      }
+
+      if (to.params && path.includes(":")) {
+        for (const [key, val] of Object.entries(to.params)) {
+          path = path.replace(`:${key}`, String(val));
+        }
+      }
+
       if (to.query) {
         const queryStr = new URLSearchParams(to.query).toString();
         if (queryStr) path += "?" + queryStr;
@@ -236,7 +313,11 @@ export const router = {
       resolved.fullPath,
     );
     currentRoute.value = resolved;
-    window.dispatchEvent(new CustomEvent("microtsm:router-change", { detail: { path: resolved.fullPath } }));
+    window.dispatchEvent(
+      new CustomEvent("microtsm:router-change", {
+        detail: { path: resolved.fullPath },
+      }),
+    );
   },
 
   async replace(to: any): Promise<void> {
@@ -247,7 +328,11 @@ export const router = {
       resolved.fullPath,
     );
     currentRoute.value = resolved;
-    window.dispatchEvent(new CustomEvent("microtsm:router-change", { detail: { path: resolved.fullPath } }));
+    window.dispatchEvent(
+      new CustomEvent("microtsm:router-change", {
+        detail: { path: resolved.fullPath },
+      }),
+    );
   },
 
   back(): void {
@@ -288,3 +373,12 @@ window.addEventListener("popstate", () => {
     window.location.pathname + window.location.search + window.location.hash;
   updateCurrentRoute(fullPath);
 });
+
+window.addEventListener("microtsm:navigation-event", ((e: Event) => {
+  const customEvent = e as CustomEvent<{ to: URL; from: URL }>;
+  if (customEvent.detail && customEvent.detail.to) {
+    const toUrl = customEvent.detail.to;
+    const fullPath = toUrl.pathname + toUrl.search + toUrl.hash;
+    updateCurrentRoute(fullPath);
+  }
+}) as EventListener);

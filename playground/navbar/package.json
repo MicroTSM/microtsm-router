@@ -11,7 +11,7 @@
     },
     "dependencies": {
         "@microtsm/cli": "0.0.104",
-        "@microtsm/vue": "^0.0.14",
+        "@microtsm/vue": "workspace:*",
         "vue": "^3.5.13",
         "@microtsm/router": "workspace:*"
     },

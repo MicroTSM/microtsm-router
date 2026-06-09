@@ -37,7 +37,7 @@ function matchPathPattern(
   return params;
 }
 
-function findFullPathByName(
+export function findFullPathByName(
   routes: RouteRecord[],
   name: string,
   parentPath = "",

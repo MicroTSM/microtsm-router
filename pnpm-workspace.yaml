@@ -1,3 +1,6 @@
 packages:
-    - '.'
-    - 'playground/*'
+  - '.'
+  - 'playground/*'
+overrides:
+  '@microtsm/vue': link:../microtsm-vue
+  'microtsm': link:../microtsm

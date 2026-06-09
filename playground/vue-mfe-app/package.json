@@ -5,15 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc -b && microtsm build",
     "preview": "vite preview",
     "serve": "microtsm serve"
   },
   "dependencies": {
+    "@microtsm/router": "workspace:*",
     "vue": "^3.5.34",
     "microtsm": "^0.0.76",
     "@microtsm/cli": "^0.0.104",
-    "@microtsm/vue": "^0.0.14"
+    "@microtsm/vue": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.12.3",
