@@ -4,17 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "microtsm",
     "build": "vue-tsc -b && microtsm build",
     "preview": "vite preview",
     "serve": "microtsm serve"
   },
   "dependencies": {
-    "@microtsm/router": "workspace:*",
-    "vue": "^3.5.34",
-    "microtsm": "^0.0.76",
     "@microtsm/cli": "^0.0.104",
-    "@microtsm/vue": "workspace:*"
+    "@microtsm/router": "workspace:*",
+    "@microtsm/vue": "workspace:*",
+    "@tailwindcss/vite": "^4.3.0",
+    "microtsm": "^0.0.76",
+    "tailwindcss": "^3.4.19",
+    "vue": "^3.5.34"
   },
   "devDependencies": {
     "@types/node": "^24.12.3",

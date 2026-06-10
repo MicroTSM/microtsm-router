@@ -26,12 +26,11 @@ App.configureMicroApps((microApp) => {
 App.useRouteMiddleware(async (route) => {
   console.log(`🧭 Checking access for ${route.pathname}`);
 
-  const protectedRoute = route.pathname.startsWith("/dashboard");
   const userLoggedIn = !!localStorage.getItem("userToken");
 
-  if (protectedRoute && !userLoggedIn) {
+  if (!userLoggedIn) {
     console.warn("🚫 Access denied! Redirecting to login.");
-    window.location.href = "/login";
+    window.location.href = "/";
     return false;
   }
 

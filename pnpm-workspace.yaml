@@ -3,4 +3,5 @@ packages:
   - 'playground/*'
 overrides:
   '@microtsm/vue': link:../microtsm-vue
+  '@microtsm/react': link:../microtsm-react
   'microtsm': link:../microtsm
